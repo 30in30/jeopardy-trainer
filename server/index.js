@@ -1,46 +1,51 @@
-const userRoutes = require('./routes/user');
-const questionRoutes = require('./routes/questions');
+const express = require('express');
+const dotenv = require('dotenv');
+const http = require('http');
 const { auth } = require('express-openid-connect');
-const express = require('express')
-const dotenv = require('dotenv')
+const questionRoutes = require('./routes/questions');
+const userRoutes = require('./routes/user');
+const cors = require('cors')
 
 dotenv.config();
 
 const app = express();
+const port = process.env.PORT || 4000;
 
 const config = {
-    authRequired: false,
-    auth0logout: true
+  authRequired: false,
+  auth0Logout: true,
+  secret: process.env.SECRET,
+  baseURL: process.env.BASE_URL || `http://localhost:${port}`,
+  clientID: process.env.CLIENT_ID,
+  issuerBaseURL: process.env.ISSUER_BASE_URL,
 };
 
-const port = process.env.PORT || 3000;
-if (!config.baseURL && !process.env.BASE_URL && process.env.PORT && process.env.NODE_ENV !== 'production') {
-    config.baseURL = `http://localhost:${port}`;
-}
+app.use(auth(config));
+app.use(express.json());
+app.use(cors());
 
-app.use(function (req, res, next) {
-    res.locals.user = req.oidc.user;
-    next();
+app.use((req, res, next) => {
+  console.log(`[${req.method}] ${req.originalUrl}`);
+  next();
 });
 
 app.use('/api', questionRoutes);
 app.use('/api', userRoutes);
 
-app.use(function (req, res, next) {
-  const err = new Error('Not Found');
+app.use((req, res, next) => {
+  const err = new Error(`Not Found: ${req.originalUrl}`);
   err.status = 404;
   next(err);
 });
 
-app.use(function (err, req, res, next) {
-  res.status(err.status || 500);
-  res.render('error', {
+app.use((err, req, res, next) => {
+  console.error('SERVER ERROR:', err.stack || err);
+  res.status(err.status || 500).json({
     message: err.message,
-    error: process.env.NODE_ENV !== 'production' ? err : {}
+    stack: process.env.NODE_ENV !== 'production' ? err.stack : undefined,
   });
 });
 
-http.createServer(app)
-  .listen(port, () => {
-    console.log(`Listening on ${config.baseURL}`);
-  });
+http.createServer(app).listen(port, () => {
+  console.log(`Server listening on ${config.baseURL}`);
+});
